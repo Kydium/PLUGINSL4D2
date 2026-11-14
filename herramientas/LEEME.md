@@ -3,16 +3,15 @@
 Para dejar todo funcionando en una PC nueva (o despues de formatear):
 
 1. Instala **Python** (marca "Add python.exe to PATH") y **Git for Windows**.
-2. Descarga este repo (boton verde **Code > Download ZIP**) y descomprimelo.
-3. Entra a la carpeta `herramientas` y abre **instalar.bat**.
-4. Responde las preguntas (Enter = valor por defecto):
-   - carpeta del Left 4 Dead 2
-   - carpeta donde van los repos (ej. `E:\L4D2SVR`)
-   - tu usuario de GitHub y el nombre de los repos (pagina y plugins)
-   - dominio propio de la pagina (si tienes)
+2. Descarga este repo (boton verde **Code > Download ZIP**), descomprimelo y pon la carpeta
+   `herramientas` donde quieras tener todo (ej. `D:\Servidor`).
+3. Abre **instalar.bat**.
+4. El instalador busca solo el Left 4 Dead 2 en todos tus discos y bibliotecas de Steam,
+   te muestra un resumen y solo pregunta **¿Instalar con esto?** (Enter = si).
 
-El instalador clona los repos, copia `watcher.py` a su carpeta con su `watcher_config.json`,
-lo pone en el inicio de Windows y lo arranca. Si faltan plugins en `scripting`, ofrece copiarlos.
+Todo queda en la misma carpeta del instalador: los repos (`kdm`, `PLUGINSL4D2`) y el `watcher`.
+El watcher queda en el inicio de Windows y arranca solo. Si faltan plugins en `scripting`,
+ofrece copiarlos desde el repo.
 
 ## Que hace el watcher
 

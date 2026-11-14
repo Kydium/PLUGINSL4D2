@@ -2,8 +2,9 @@
 """
 instalar.py - Instala el watcher de ClubCampestre desde cero (lo abre instalar.bat).
 
-Pregunta las carpetas y los repos de GitHub, clona los repos, deja el watcher
-en su propia carpeta con su configuracion y lo pone en el inicio de Windows.
+Busca solo el Left 4 Dead 2 (en cualquier disco), instala todo en la carpeta
+donde esta este archivo, clona los repos, deja el watcher con su configuracion,
+lo pone en el inicio de Windows y lo arranca. Solo pide confirmar.
 Se puede volver a ejecutar cuando quieras: lo que ya existe no se borra.
 """
 import json
@@ -42,8 +43,8 @@ def git(args, cwd=None):
 
 def clonar(usuario, repo, base):
     """Clona github.com/usuario/repo en base/repo (si ya esta, lo deja)."""
-    destino = Path(base) / repo
     url = f"https://github.com/{usuario}/{repo}.git"
+    destino = repo_existente(repo, base) or (Path(base) / repo)
     if (destino / ".git").exists():
         print(f"  Ya existe {destino} (no se toca). Actualizando...")
         git(["pull", "--rebase", "--autostash"], cwd=str(destino))
@@ -60,6 +61,54 @@ def clonar(usuario, repo, base):
         return None, url
     print(f"  Listo: {destino}")
     return destino, url
+
+
+def buscar_l4d2():
+    """Busca la carpeta del Left 4 Dead 2 en todas las bibliotecas de Steam y discos."""
+    import re, string
+    raices = []
+    try:
+        import winreg
+        for hive, clave, valor in [(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam", "SteamPath"),
+                                   (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
+                                   (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Valve\Steam", "InstallPath")]:
+            try:
+                with winreg.OpenKey(hive, clave) as k:
+                    raices.append(Path(winreg.QueryValueEx(k, valor)[0]))
+            except OSError:
+                pass
+    except ImportError:
+        pass
+    bibliotecas = []
+    for r in raices:
+        bibliotecas.append(r)
+        vdf = r / "steamapps" / "libraryfolders.vdf"
+        if vdf.exists():
+            for m in re.finditer(r'"path"\s+"([^"]+)"', vdf.read_text("utf-8", "replace")):
+                bibliotecas.append(Path(m.group(1).replace("\\\\", "\\")))
+    for letra in string.ascii_uppercase[2:]:
+        d = Path(f"{letra}:\\")
+        if d.exists():
+            for sub in ["Steam", "SteamLibrary", "Program Files (x86)\\Steam", "Program Files\\Steam", "Juegos\\Steam", "Games\\Steam"]:
+                bibliotecas.append(d / sub)
+    hallados = []
+    for b in bibliotecas:
+        c = b / "steamapps" / "common" / "Left 4 Dead 2"
+        try:
+            if (c / "left4dead2").exists() and os.path.normcase(os.path.normpath(str(c))) not in \
+                    [os.path.normcase(os.path.normpath(str(h))) for h in hallados]:
+                hallados.append(c)
+        except OSError:
+            pass
+    return hallados
+
+
+def repo_existente(nombre, base):
+    """Si el repo ya esta clonado en la carpeta base o en la de arriba, lo usa."""
+    for d in [Path(base) / nombre, Path(base).parent / nombre]:
+        if (d / ".git").exists():
+            return d
+    return None
 
 
 def rama_de(repo_dir):
@@ -88,28 +137,45 @@ def main():
         git(["config", "--global", "user.name", preguntar("Tu nombre o usuario", "Kydium")])
         git(["config", "--global", "user.email", preguntar("Tu correo de GitHub")])
 
-    # ---- carpetas ----
-    titulo("1. CARPETAS")
-    while True:
-        l4d2 = preguntar("Carpeta del Left 4 Dead 2", r"E:\Steam\steamapps\common\Left 4 Dead 2")
-        if (Path(l4d2) / "left4dead2" / "addons" / "sourcemod").exists():
-            break
-        print("  No encuentro left4dead2\\addons\\sourcemod ahi. Revisa la ruta (o instala SourceMod primero).")
-        if not si_no("  ¿Escribirla de nuevo?"):
-            break
-    base = preguntar("Carpeta donde van los repos y el watcher", r"E:\L4D2SVR")
+    # ---- valores detectados ----
+    titulo("BUSCANDO EL LEFT 4 DEAD 2...")
+    hallados = buscar_l4d2()
+    if len(hallados) == 1:
+        l4d2 = str(hallados[0])
+    elif len(hallados) > 1:
+        print("Encontre varios:")
+        for i, h in enumerate(hallados, 1):
+            print(f"  {i}. {h}")
+        n = preguntar("¿Cual uso? (numero)", "1")
+        l4d2 = str(hallados[int(n) - 1]) if n.isdigit() and 0 < int(n) <= len(hallados) else str(hallados[0])
+    else:
+        print("No lo encontre solo.")
+        l4d2 = preguntar("Pega la carpeta del Left 4 Dead 2 (la que tiene left4dead2 adentro)")
+    base = str(AQUI)
+    usuario, repo_web, repo_pl = "Kydium", "kdm", "PLUGINSL4D2"
+
+    def resumen():
+        sm = Path(l4d2) / "left4dead2" / "addons" / "sourcemod"
+        print()
+        print(f"  Juego:          {l4d2}" + ("" if sm.exists() else "   (OJO: no tiene SourceMod)"))
+        print(f"  Se instala en:  {base}")
+        print(f"  GitHub:         {usuario}  |  pagina: {repo_web or '-'}  |  plugins: {repo_pl or '-'}")
+
+    titulo("ESTO ES LO QUE VOY A USAR")
+    resumen()
+    print()
+    if not si_no("¿Instalar con esto?"):
+        l4d2 = preguntar("Carpeta del Left 4 Dead 2", l4d2)
+        base = preguntar("Carpeta donde se instala (repos y watcher)", base)
+        usuario = preguntar("Tu usuario de GitHub", usuario)
+        repo_web = preguntar("Repo de la pagina (vacio = no usar)", repo_web)
+        repo_pl = preguntar("Repo de los plugins (vacio = no usar)", repo_pl)
+        titulo("QUEDA ASI")
+        resumen()
     Path(base).mkdir(parents=True, exist_ok=True)
+    print("\nLos repos tienen que existir en GitHub (si son nuevos, crealos vacios en github.com/new).")
 
-    # ---- repos ----
-    titulo("2. GITHUB")
-    usuario = preguntar("Tu usuario de GitHub", "Kydium")
-    print("\nRepo de la PAGINA (comandos, top 10, torneos). Vacio = no usar.")
-    repo_web = preguntar("Nombre del repo de la pagina", "kdm")
-    print("\nRepo de los PLUGINS (respaldo con versiones). Vacio = no usar.")
-    repo_pl = preguntar("Nombre del repo de plugins", "PLUGINSL4D2")
-    print("\nLos repos tienen que existir en GitHub (crealos vacios en github.com/new si no estan).")
-
-    titulo("3. CLONANDO")
+    titulo("CLONANDO")
     dir_web = url_web = dir_pl = url_pl = None
     if repo_web:
         dir_web, url_web = clonar(usuario, repo_web, base)
@@ -120,7 +186,7 @@ def main():
     if dir_web:
         cname = dir_web / "CNAME"
         actual = cname.read_text("utf-8").strip() if cname.exists() else ""
-        dom = preguntar("Dominio propio de la pagina (vacio = ninguno)", actual)
+        dom = actual or preguntar("Dominio propio de la pagina (vacio = ninguno)")
         if dom and dom != actual:
             cname.write_text(dom + "\n", "utf-8")
             git(["add", "CNAME"], cwd=str(dir_web))
@@ -141,8 +207,8 @@ def main():
                 print("  Copiados.")
 
     # ---- watcher ----
-    titulo("4. WATCHER")
-    carpeta_w = Path(preguntar("Carpeta del watcher", str(Path(base) / "watcher")))
+    titulo("WATCHER")
+    carpeta_w = Path(base) / "watcher"
     carpeta_w.mkdir(parents=True, exist_ok=True)
     origen = AQUI / "watcher.py"
     if origen.resolve() != (carpeta_w / "watcher.py").resolve():
@@ -162,13 +228,13 @@ def main():
     if not pyw.exists():
         pyw = Path(sys.executable)
     comando = f'"{pyw}" "{carpeta_w / "watcher.py"}"'
-    if si_no("¿Que el watcher arranque solo al prender la PC?"):
+    if True:   # que arranque solo al prender la PC
         r = subprocess.run(["reg", "add", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
                             "/v", "WatcherKDM", "/t", "REG_SZ", "/d", comando, "/f"],
                            capture_output=True, text=True)
         print("  Listo, queda en el inicio." if r.returncode == 0 else "  No se pudo: " + r.stderr.strip())
 
-    if si_no("¿Arrancar el watcher ahora? (cierra el que este abierto)"):
+    if True:   # arrancarlo ya (cierra el que este abierto)
         parar_watchers_viejos()
         subprocess.Popen([str(pyw), str(carpeta_w / "watcher.py")], cwd=str(carpeta_w),
                          creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
