@@ -10,6 +10,9 @@ if not defined PYW (
   pause
   exit /b
 )
-start "" "%PYW%" "%~dp0watcher.py"
-echo Watcher arrancado de nuevo. Su log: %~dp0logs\watcher.log
+rem si este .bat esta en la carpeta del instalador, usa el watcher instalado (carpeta watcher)
+set "W=%~dp0"
+if exist "%~dp0watcher\watcher_config.json" set "W=%~dp0watcher\"
+start "" "%PYW%" "%W%watcher.py"
+echo Watcher arrancado de nuevo. Su log: %W%logs\watcher.log
 timeout /t 3 >nul
