@@ -48,7 +48,7 @@
 #include <sdktools>
 #include <left4dhooks>
 
-#define PLUGIN_VERSION  "32.0.0"
+#define PLUGIN_VERSION  "32.1.0"
 
 #define DEFAULT_K_FACTOR    "80"
 #define DEFAULT_ENABLED     "1"
@@ -119,6 +119,7 @@ ConVar g_cvEnabled;
 ConVar g_cvKFactor;
 ConVar g_cvDebugMode;
 ConVar g_cvWebScript;
+ConVar g_cvTopMin;      // partidas minimas para salir en el Top 10 y tener puesto
 
 int  g_iSR[MAXPLAYERS + 1];
 int  g_iWins[MAXPLAYERS + 1];
@@ -206,6 +207,7 @@ public void OnPluginStart()
     g_cvKFactor   = CreateConVar("sm_sr_k",      DEFAULT_K_FACTOR, "Factor K del calculo Elo", FCVAR_NOTIFY);
     g_cvDebugMode = CreateConVar("sm_sr_debug",  DEFAULT_DEBUG,    "1 = cuenta aunque un equipo no tenga humanos (para probar solo)", FCVAR_NOTIFY);
     g_cvWebScript = CreateConVar("sm_sr_web_script", "1", "1 = genera data/sr_index.html al terminar la campaña", FCVAR_NOTIFY);
+    g_cvTopMin    = CreateConVar("sm_sr_top_min_partidas", "3", "Partidas minimas (victorias + derrotas) para salir en el Top 10 y tener puesto", FCVAR_NOTIFY, true, 1.0, true, 100.0);
     g_cvHudPad    = CreateConVar("sm_sr_hud_pad",   "4", "Espacios delante de las lineas blancas del panel (para alinear con las naranjas)", FCVAR_NOTIFY, true, 0.0, true, 10.0);
     g_cvHudRotar  = CreateConVar("sm_sr_hud_rotar", "0", "1 = al iniciar la ronda muestra a la izquierda el Top 10 y luego tu SR (una vez). 0 = desactivado", FCVAR_NOTIFY);
     g_cvHudSegFin   = CreateConVar("sm_sr_hud_seg_fin",   "30", "Segundos que se ve el panel de fin de campaña", FCVAR_NOTIFY, true, 1.0, true, 300.0);
@@ -1248,9 +1250,7 @@ public Action Cmd_SR(int client, int args)
     char sEscaped[128];
     SQL_EscapeString(g_DB, sSteamID, sEscaped, sizeof(sEscaped));
     char sQuery[512];
-    Format(sQuery, sizeof(sQuery),
-        "SELECT COUNT(*)+1 FROM mmr_players WHERE mmr > \
-        (SELECT mmr FROM mmr_players WHERE steamid='%s');", sEscaped);
+    ConsultaPuesto(sEscaped, sQuery, sizeof(sQuery));
     DataPack dp = new DataPack();
     dp.WriteCell(GetClientUserId(client));
     SQL_TQuery(g_DB, Callback_ShowSR, sQuery, dp);
@@ -1276,10 +1276,12 @@ public Action Cmd_Top(int client, int args)
     if (g_DB == null) return Plugin_Handled;
     DataPack dp = new DataPack();
     dp.WriteCell((client == 0) ? 0 : GetClientUserId(client));
-    SQL_TQuery(g_DB, Callback_Top,
+    char sQuery[256];
+    Format(sQuery, sizeof(sQuery),
         "SELECT nombre, mmr, wins, losses, steamid FROM mmr_players \
-         WHERE (wins + losses) >= 1 \
-         ORDER BY mmr DESC LIMIT 10;", dp);
+         WHERE (wins + losses) >= %d \
+         ORDER BY mmr DESC LIMIT 10;", TopMin());
+    SQL_TQuery(g_DB, Callback_Top, sQuery, dp);
     return Plugin_Handled;
 }
 
@@ -1487,9 +1489,10 @@ public Action Cmd_Top1v1(int client, int args)
     DataPack dp = new DataPack();
     dp.WriteCell((client == 0) ? 0 : GetClientUserId(client));
 
-    SQL_TQuery(g_DB, Callback_Top1v1,
-        "SELECT nombre, mmr, wins, losses, steamid FROM mmr_players_1v1 WHERE (wins + losses) >= 1 ORDER BY mmr DESC LIMIT 10;",
-        dp);
+    char sQuery[256];
+    Format(sQuery, sizeof(sQuery),
+        "SELECT nombre, mmr, wins, losses, steamid FROM mmr_players_1v1 WHERE (wins + losses) >= %d ORDER BY mmr DESC LIMIT 10;", TopMin());
+    SQL_TQuery(g_DB, Callback_Top1v1, sQuery, dp);
 
     return Plugin_Handled;
 }
@@ -1673,10 +1676,12 @@ void GenerarRankingRowsWeb(char[] sOut, int iMaxLen)
         return;
     }
 
-    DBResultSet rs = SQL_Query(g_DB,
+    char sQ[256];
+    Format(sQ, sizeof(sQ),
         "SELECT nombre, mmr, wins, losses FROM mmr_players \
-         WHERE steamid NOT LIKE 'STEAM_SIM%' AND (wins+losses)>0 \
-         ORDER BY mmr DESC LIMIT 50");
+         WHERE steamid NOT LIKE 'STEAM_SIM%%' AND (wins+losses)>=%d \
+         ORDER BY mmr DESC LIMIT 50", TopMin());
+    DBResultSet rs = SQL_Query(g_DB, sQ);
     if (rs == null) return;
 
     int iPos = 0, iLiderSR = -1;
@@ -1977,10 +1982,12 @@ bool GenerarPagina(const char[] sIn, const char[] sOut, char[] sInfo, int iInfoL
 void GenerarTop10Muro(char[] sOut, int iMaxLen)
 {
     sOut[0] = '\0';
-    DBResultSet rs = SQL_Query(g_DB,
+    char sQ[256];
+    Format(sQ, sizeof(sQ),
         "SELECT nombre, mmr, wins, losses FROM mmr_players \
-         WHERE steamid NOT LIKE 'STEAM_SIM%' AND (wins+losses)>0 \
-         ORDER BY mmr DESC LIMIT 10");
+         WHERE steamid NOT LIKE 'STEAM_SIM%%' AND (wins+losses)>=%d \
+         ORDER BY mmr DESC LIMIT 10", TopMin());
+    DBResultSet rs = SQL_Query(g_DB, sQ);
     int iPos = 0;
     if (rs != null)
     {
@@ -2353,9 +2360,11 @@ void IniciarRotacion()
     if (YaSalieron()) return;   // si salieron antes de los 3 seg, no empezar
 
     // Refrescar el top y el puesto de cada jugador (asincrono)
-    SQL_TQuery(g_DB, Callback_TopCache,
+    char sQ[256];
+    Format(sQ, sizeof(sQ),
         "SELECT nombre, mmr, wins, losses, steamid FROM mmr_players \
-         WHERE (wins + losses) >= 1 ORDER BY mmr DESC LIMIT 10;");
+         WHERE (wins + losses) >= %d ORDER BY mmr DESC LIMIT 10;", TopMin());
+    SQL_TQuery(g_DB, Callback_TopCache, sQ);
     for (int i = 1; i <= MaxClients; i++)
         if (IsValidHuman(i)) PedirRank(i);
 
@@ -2440,13 +2449,29 @@ public void Callback_TopCache(Database db, DBResultSet results, const char[] sEr
     GuardarTopCache(results);
 }
 
+// Partidas minimas para salir en el Top 10 (cvar sm_sr_top_min_partidas)
+int TopMin()
+{
+    return g_cvTopMin != null ? g_cvTopMin.IntValue : 3;
+}
+
+// Puesto del jugador contando solo a los que tienen las partidas minimas.
+// Si el jugador todavia no llega al minimo, devuelve 0 (= sin puesto).
+void ConsultaPuesto(const char[] sEsc, char[] sQuery, int iLen)
+{
+    int n = TopMin();
+    Format(sQuery, iLen,
+        "SELECT CASE WHEN (SELECT wins+losses FROM mmr_players WHERE steamid='%s') >= %d \
+         THEN (SELECT COUNT(*)+1 FROM mmr_players WHERE (wins+losses) >= %d AND mmr > \
+               (SELECT mmr FROM mmr_players WHERE steamid='%s')) ELSE 0 END;", sEsc, n, n, sEsc);
+}
+
 void PedirRank(int client)
 {
-    char sSteam[64], sEsc[128], sQuery[256];
+    char sSteam[64], sEsc[128], sQuery[512];
     if (!GetClientAuthId(client, AuthId_Steam2, sSteam, sizeof(sSteam))) return;
     SQL_EscapeString(g_DB, sSteam, sEsc, sizeof(sEsc));
-    Format(sQuery, sizeof(sQuery),
-        "SELECT COUNT(*)+1 FROM mmr_players WHERE mmr > (SELECT mmr FROM mmr_players WHERE steamid='%s');", sEsc);
+    ConsultaPuesto(sEsc, sQuery, sizeof(sQuery));
     SQL_TQuery(g_DB, Callback_RankCache, sQuery, GetClientUserId(client));
 }
 
@@ -2633,10 +2658,12 @@ int GenerarMotd()
     // Top 10
     static char sRows[4096];
     sRows[0] = '\0';
-    DBResultSet rs = SQL_Query(g_DB,
+    char sQ[256];
+    Format(sQ, sizeof(sQ),
         "SELECT nombre, mmr, wins, losses FROM mmr_players \
-         WHERE steamid NOT LIKE 'STEAM_SIM%' AND (wins+losses)>0 \
-         ORDER BY mmr DESC LIMIT 10");
+         WHERE steamid NOT LIKE 'STEAM_SIM%%' AND (wins+losses)>=%d \
+         ORDER BY mmr DESC LIMIT 10", TopMin());
+    DBResultSet rs = SQL_Query(g_DB, sQ);
     int iPos = 0;
     if (rs != null)
     {

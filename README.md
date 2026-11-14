@@ -17,5 +17,5 @@ Para instalar el watcher en una PC nueva: ver [herramientas/LEEME.md](herramient
 | [cl4d2_fakeping](cl4d2_fakeping/cl4d2_fakeping.sp) | CL4D2 Fake Ping v2 | 2.0.0 | [1 guardadas](cl4d2_fakeping/HISTORIAL.md) |
 | [cl4d2_mmr](cl4d2_mmr/cl4d2_mmr.sp) | L4D2 SR System (simple) | 32.0.0 | [1 guardadas](cl4d2_mmr/HISTORIAL.md) |
 | [cl4d2_pausa](cl4d2_pausa/cl4d2_pausa.sp) | ClubCampestre Pausa (prueba) | 1.0.0 | [1 guardadas](cl4d2_pausa/HISTORIAL.md) |
-| [cl4d2_sr](cl4d2_sr/cl4d2_sr.sp) | L4D2 SR System (ClubCampestre) | 32.0.0 | [1 guardadas](cl4d2_sr/HISTORIAL.md) |
+| [cl4d2_sr](cl4d2_sr/cl4d2_sr.sp) | L4D2 SR System (ClubCampestre) | 32.1.0 | [2 guardadas](cl4d2_sr/HISTORIAL.md) |
 | [cl4d2_team_balancer](cl4d2_team_balancer/cl4d2_team_balancer.sp) | L4D2 Team Balancer by MMR | 3.7.0 | [1 guardadas](cl4d2_team_balancer/HISTORIAL.md) |
