@@ -19,5 +19,7 @@ ofrece copiarlos desde el repo.
 - Cuando cambias un plugin propio (`cc_*.sp`, `cl4d2_*.sp` en `scripting`), lo sube al repo
   de plugins con su version. Las versiones anteriores no se borran: quedan en `<plugin>/versiones/`.
 
+En la carpeta del watcher quedan `detener_watcher.bat` y `reiniciar_watcher.bat`.
+
 Para cambiar carpetas o repos despues, vuelve a ejecutar `instalar.bat` o edita `watcher_config.json`.
 Log: `logs/watcher.log` dentro de la carpeta del watcher.

@@ -210,9 +210,10 @@ def main():
     titulo("WATCHER")
     carpeta_w = Path(base) / "watcher"
     carpeta_w.mkdir(parents=True, exist_ok=True)
-    origen = AQUI / "watcher.py"
-    if origen.resolve() != (carpeta_w / "watcher.py").resolve():
-        shutil.copy2(origen, carpeta_w / "watcher.py")
+    for nombre in ["watcher.py", "detener_watcher.bat", "reiniciar_watcher.bat"]:
+        origen = AQUI / nombre
+        if origen.exists() and origen.resolve() != (carpeta_w / nombre).resolve():
+            shutil.copy2(origen, carpeta_w / nombre)
     cfg = {
         "l4d2": l4d2,
         "repo_web": str(dir_web) if dir_web else "",
