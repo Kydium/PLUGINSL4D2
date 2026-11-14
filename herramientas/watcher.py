@@ -143,13 +143,18 @@ def nombre_de(texto, defecto):
     return m.group(1) if m else defecto
 
 
+def igual(a, b):
+    """Mismo contenido aunque uno tenga saltos de linea de Windows (CRLF) y el otro no."""
+    return a.replace(b"\r\n", b"\n") == b.replace(b"\r\n", b"\n")
+
+
 def guardar_plugin(src, repo, cuando):
     """Copia un plugin al repo. Devuelve (archivos_cambiados, version) o None si no cambio."""
     datos = src.read_bytes()
     base  = src.stem
     carpeta = repo / base
     ultimo  = carpeta / src.name
-    if ultimo.exists() and ultimo.read_bytes() == datos:
+    if ultimo.exists() and igual(ultimo.read_bytes(), datos):
         return None
     texto = datos.decode("utf-8", "replace")
     ver   = version_de(texto)
@@ -157,7 +162,7 @@ def guardar_plugin(src, repo, cuando):
     vdir.mkdir(parents=True, exist_ok=True)
     # nombre de la version; si ya hay una con el mismo numero y otro contenido: _2, _3...
     destino, n = vdir / f"{base}_v{ver}.sp", 1
-    while destino.exists() and destino.read_bytes() != datos:
+    while destino.exists() and not igual(destino.read_bytes(), datos):
         n += 1
         destino = vdir / f"{base}_v{ver}_{n}.sp"
     cambiados = []
